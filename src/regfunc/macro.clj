@@ -51,13 +51,18 @@
    'dump-res]
   ) 
 
+(def ^:dynamic ttt)
+
 (defn gen-body [sub-name p1 p1val p2 bindings body]
-  `(let [~(last p1) ~(if (= '& (first p1)) (into [] p1val) p1val)
-         ~@bindings]
-     (fn ~sub-name [~p2]
-      (some->
-        ~@body
-        ~@result-postprocessors))))
+  `(binding [ttt (conj (if (bound? #'ttt) (var-get #'ttt) []) '~sub-name)]
+     ;; we heavily rely on the p1val being expanded bellow in the same thread
+     (println "~~" '~sub-name "~~" (and (bound? #'ttt) (var-get #'ttt)))
+     (let [~(last p1) ~(if (= '& (first p1)) (into [] p1val) p1val)
+           ~@bindings]
+       (fn ~sub-name [~p2]
+         (some->
+           ~@body
+           ~@result-postprocessors)))))
 
 (defmacro rule
   {:arglits '([fname [& p1-ops p2-strm] [bindings*]? body])
@@ -69,7 +74,7 @@
         arglist (first args)
         p1 (butlast arglist)
         p2 (last arglist)
-        ; _ (println "defrule" fname arglist p1 p2)
+                                        ; _ (println "defrule" fname arglist p1 p2)
         sub-name (symbol (str "*" fname))
         namesym (symbol (name (ns-name *ns*)) (name fname))
         _body (next args)
@@ -79,29 +84,8 @@
         template `(defmacro ~fname [~@p1]
                     ;; things that need to shadow the params or add "static" values
                     ;; :pre-sub-fn
-                    (gen-body '~sub-name '~p1 ~(last p1) '~p2 '~bindings '~body)
-
-                    #_(fn ~sub-name [~p2]
-                         (some->
-                           ;; only things that *need* to wrap the body 
-                           :body
-                           ~@body
-                           ;; post-processing finctions
-                           ~@result-postprocessors)))]
-
-    (-> template
-      #_(wrap-part :body
-          (fn [part]
-            (reduce
-              (fn [bo m]
-                (if (:ignore (meta m)) bo (m bo  {:fname fname :p1 p1})))
-              part
-              result-middlewares)))
-      #_(wrap-part :pre-sub-fn
-          (fn [part]
-            `(let [~@bindings]
-               ~part))))))
-
+                    (gen-body '~sub-name '~p1 ~(last p1) '~p2 '~bindings '~body))]
+    template))
 
 (defmacro deffragment
   {:arglists '([name fqn? op])

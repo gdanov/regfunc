@@ -3,7 +3,8 @@
             [midje.sweet :refer :all]))
 
 (facts "rule" 
-  (rule test1 [a b] (str a " " b)) 
+  (rule test1 [a b] (str a " " b))
+  (. #'test1 isMacro) => true
   (let [t* (test1 "hello")]
     t* => fn?
     (t* "world") => "hello world")

@@ -231,8 +231,8 @@
 (defmacro apply-macro
   "to be used for vararg macro like group and either to be applied on collection. vals bust be quoted. vals is collection"
   [ma vals]
-  (println vals)
-  (println (eval vals))
+  ; (println vals)
+  ; (println (eval vals))
   `(~ma ~@(eval vals)))
 
 (defmacro mmap
@@ -242,15 +242,14 @@
     `'(~@res)))
 
 (def *number
-  (*toInt (*tostr (*repeat (either (*eq \-) (*eq \1) (*eq \2) (*eq \3) (*eq \4) (*eq \5) (*eq \6) (*eq \7) (*eq \8) (*eq \9) (*eq \0)))))
+  (*toInt (*tostr (*repeat (apply-macro either (mmap *eq '(\- \1 \2 \3 \4 \5 \6 \7 \8 \9 \0))))))
 )
 
 (def *true (*eq "true"))
 (def *false (*eq "false"))
-(def *null (*tostr (apply-macro *group (mmap *eq (seq "null")) ;(map (fn [%] `(*eq ~%)) (seq "null"))
-                     )))
-(def *true (*tostr (apply-macro *group (map (fn [%] `(*eq ~%)) (seq "true")))))
-(def *false (*tostr (apply-macro *group (map (fn [%] `(*eq ~%)) (seq "false")))))
+(def *null (*tostr (apply-macro *group (mmap *eq (seq "null")))))
+(def *true (*tostr (apply-macro *group (mmap *eq (seq "true")))))
+(def *false (*tostr (apply-macro *group (mmap *eq (seq "false")))))
 
 (def *value (fn [strm]
               (some-> strm
