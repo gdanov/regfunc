@@ -1,5 +1,5 @@
 (defproject
-	repfunc "0.1.0-SNAPSHOT"
+	regfunc "0.1.0-SNAPSHOT"
 
 	:dependencies [[org.clojure/clojure "1.7.0"]
 								 [http-kit "2.1.16"]
@@ -12,15 +12,19 @@
 								 [org.clojure/core.async "0.1.346.0-17112a-alpha"]
 
                  [mvxcvi/puget "0.8.0"]
-								 [org.clojure/tools.namespace "0.2.10"]
 
-                 [midje "1.7.0"]
+                 [midje "1.8.3"]
 
                  [robert/hooke "1.3.0"]
                  [com.taoensso/timbre "4.1.0"]
-                 ]
+
+                 [criterium "0.4.3"]
+
+                 [org.clojure/tools.nrepl "0.2.12"]]
 
   ;; :global-vars {*print-length* 30}
+
+  :jvm-opts ["-Dannotate.typecheck=on"]
   
 	:plugins [[mvxcvi/whidbey "0.6.0"]
 						[lein-midje "3.1.3"]]
@@ -30,8 +34,9 @@
 	:target-path "target/%s"
 
 	:profiles {:uberjar {:aot :all}
-             :repl {:plugins [[cider/cider-nrepl "0.10.0-SNAPSHOT"]
-                              [refactor-nrepl "1.1.0"]]}}
+             :repl {:plugins [[cider/cider-nrepl "0.10.0"]
+                              [refactor-nrepl "2.0.0-SNAPSHOT"]
+                              ]}}
 
 	:whidbey {:width           180
 						:map-delimiter   ""

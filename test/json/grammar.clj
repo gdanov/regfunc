@@ -1,162 +1,174 @@
 (ns json.grammar
-  (:require; [regfunc.core :refer :all]
-   [annotate.fns :refer :all]
-   [annotate.types :refer :all]
-   [taoensso.timbre.profiling :as prof])
-  (:import [java.io InputStreamReader ByteArrayInputStream FileInputStream Reader BufferedReader]))
+  (:require [regfunc.macro :refer :all]
+            [annotate.types :refer :all]
+            [clojure.zip :az zip]
+            [annotate.fns :refer :all]
+            [taoensso.timbre.profiling :as prof])
+  (:import [java.io InputStreamReader ByteArrayInputStream FileInputStream Reader BufferedReader]
+           [regfunc.macro Token])) 
+
+(set! *warn-on-reflection* true)
+(set! *unchecked-math* :warn-on-boxed) 
+
+#_(defn take-while [pred col]
+  (sequence
+    (persistent!
+      (reduce
+        (fn [o v]
+          (if (and pred (pred v))
+            (conj! o v)
+            (reduced o)))
+        (transient [])
+        col))))
+
+(defmacro ^{:private true} assert-args
+  [& pairs]
+  `(do (when-not ~(first pairs)
+         (throw (IllegalArgumentException.
+                  (str (first ~'&form) " requires " ~(second pairs) " in " ~'*ns* ":" (:line (meta ~'&form))))))
+     ~(let [more (nnext pairs)]
+        (when more
+          (list* `assert-args more)))))
 
 ;; (token-fn) => #{nil, (->Token nil ..), (->Token some ..)}
 
-(defrecord Token [value stream])
+
+
+(defn ->T
+  ([val] (->Token val '()))
+  ([val stream] (->Token val stream)))
 
 (declare *object)
 (declare *array)
 
-;; TODO rename to chunk or link
-(defmulti get-token
-  "given token or (raw) sequence, get the next Token, if any. See the
-  tests for what you might consider strange behavior regarding
-  differences in Token and sequence handling."
-  type)
-
-;;TODO utilize lazy stream
-(defmethod get-token Token [t]
-  (prof/p :**get-token-T (get-token (:stream t))))
-(defmethod get-token clojure.lang.ISeq [s]
-  (prof/p :**get-token-ISeq
-    (when
-        (seq s)
-        (->Token (first s) (rest s)))))
-(defmethod get-token nil [_])
-(defmethod get-token :default [x] (throw (IllegalArgumentException. (str (type x)))))
-
-(defn token-seq
-  "if input is Token, it's value won't show up! the logic is that we are
-  passed either raw sequence or token that is result of previous match
-  so it's value is not needed."
-  [t]
-  (->> (get-token t)
-       (iterate get-token)
-       (take-while (comp not nil? :value))))
-
 ;;----------------
-(defn file-to-seq [fname]
-  (stream-to-seq
-    (BufferedReader.
-      (InputStreamReader.
-        (FileInputStream. fname)))))
-
 (defn stream-to-seq [^Reader isr]
   (take-while
    (comp not nil?)
    (map #(if (= -1 %) nil (char %))
         (repeatedly #(.read isr)))))
 
-(defn txt [] (let [stream (-> "   123 456   789"
-                              .getBytes
-                              ByteArrayInputStream.
-                              InputStreamReader.)]
-               (stream-to-seq stream)))
+(defn file-to-seq [fname]
+  (stream-to-seq
+    (BufferedReader.
+      (InputStreamReader.
+        (FileInputStream. ^String fname)))))
+
 ;;---------------
 
-(defn mod-t [^Token t fu]
+(defn mod-t [ t fu]
   (when (some? t) (->Token (fu (:value t)) (:stream t))))
 
 ;; TODO there is problem with arrays - () is used internally so they
 ;; can't be represented with lists. currently I pack them in vectors
 ;; using the fact that vectors are not ISeq
 
+
 (defn **lin [v]
   (if (seq? v)
-    (prof/p :**lin-reduce
-     (reduce
-       (prof/fnp **lin-do [o v]
-         (cond
-           (seq? v) (concat o v)
-           :else (concat o [v])))
-       '() v))
+    (mapcat
+      (fn [o] (if (seq? o) o (list o)))
+      v)
     v))
 
 (defn lin [fu]
   (fn [t] (mod-t (fu t) **lin)))
 
-(defn *eq
-  "matches using equality"
-  [c]
-  (let [cc c]
-    (fn **eq [t]
-      (let [tk (get-token t)]
-        (when (= cc (:value tk)) tk)))))
+(def ^:dynamic fragment-parent '())
 
-(def *= *eq)
+;; todo copy (some) metadata
+(rule ^{:test-meta true
+        :doc "simple literal equality"
+        :arglist '([literal the-input-sequence])}
+  *eq
+  [c tseq]
+  (when (= c (first tseq)) (->Token c (rest tseq))))
 
-(defn *repeat [op]
-  (prof/fnp **repeat [t]
-    (let [res (->> (iterate op (op t))
-                (take-while some?))]
-      (when (seq res) (->Token (**lin (map :value res)) (:stream (last res)))))))
+#_(rule group-ng [& ops inp]  )
 
-(defn *zero-or-more [op]
-  "never returns nil as it's optional, however when there is no match the :value is null"
-  (fn [t]
-    (prof/p :zero-or-more
-     (let [res ((*repeat op) t)]
-       (if (nil? res)
-         (->Token nil (if (some? (get-token t)) t '()))
-         res)))))
+#_(rule repeat-ng [op inp])
 
-(def ** *zero-or-more)
+#_(deffragment eq-to-one
+  ;; :eqlabel
+  (*eq 1))
 
-(def *one-or-more *repeat)
-(def *+ *repeat)
+#_(deffragment fragii
+  ;; :grpp nooo, the label is the fragment name!
+  (group-ng ;; maybe-labeled-list
+    :eqlabel (*eq 1)
+    ;; ==> (*eq fqn label 1) ==> (let [my-label# :eqlabel my-fqn# (fragii eqlabel)] (fn **eq [inp] (.. middleware (my-label#) ... body ))
+    :repeatlabel (repeat-ng (*eq 2))
+    *array
+    :the-obj object))
+
+#_(deffragment testx
+  :test ^:test ^{:doc "blaa"} (fn [_] (println "hello")) ;; illegal. must be wrapped in some macro
+  (deffragment tistttt) ;; also illegal - you don't want to defn wile passing arguments
+  (*eq 3) ;; the right way, rule or fragment symbol
+  )
+;(testx nil)
+
+(rule *repeat [op tseq]
+  
+  (let [res (->> (iterate (comp op :stream) (op tseq))
+              (take-while some?))]
+    (when (seq res) (->Token res
+                      (:stream (last res))))))
+
+(defn *splice [fac-fun]
+  (fn [strm]
+    (some-> (fac-fun strm) (with-meta {:splice true}))))
+
+(rule *zero-or-more [op tseq]
+  ;"never returns nil as it's optional, however when there is no match the :value is null"
+  (let [res ((*repeat op) tseq)]
+    ; (throw (Exception. (print-str  res)))
+    (if (nil? res)
+      (->Token nil (if (nil? tseq) '() tseq))
+       res)))
+
+(rule *dump [o strm]
+  (o strm))
 
 (defn dump [lbl f]
   (fn [t]
     (let [r (f t)]
-      (println "##" lbl ":" t "=>" r)
+      (println "#dump#" lbl ":" t "=>" r)
       r)))
 
-(defn *group [& ops]
-  (let [s-f (comp some? first)
-        cnto (count ops)
-        **it-fn (prof/fnp **it-fn [[to op]]
-                  (when (and op to) [((first op) to) (rest op)]))]
-    (fn [t]
-      (prof/p :group
-        (let [res (map
-                    first
-                    (take cnto
-                      (take-while s-f
-                        (iterate
-                          **it-fn
-                          [((first ops) t) (rest ops)]))))]
-          (when (= cnto (count res))
-            (->Token (filter some? (**lin (map :value res))) (:stream (last res)))))))))
+(rule *group [& ops tseq]
+  [ops-count (count ops)]
+  (let [res (->>
+              (iterate
+                (fn [[tok ops]]
+                  (when (and
+                          (seq ops)
+                          (seq tok))
+                    [((first ops) (:stream tok)) (rest ops)]))
+                [((first ops) tseq) (rest ops)])
+              (map first)
+              (take-while some?)
+              (take ops-count))]
+    (when (= ops-count (count res))
+      (->Token (filter some? res) (:stream (last res))))))
 
-(defn either [& ops]
-  (fn [t]
-    (prof/p :**either
-     (reduce
-       (fn [o v] (let [res (v t)]
-                   (when (some? res) (reduced res))))
-       nil
-       ops))))
+(rule either [& ops tseq]
+  (reduce
+    (fn [o v] (let [res (v tseq)]
+                (when (some? res) (reduced res))))
+    nil
+    ops))
 
 ;;***********************
 
-(defn *but [c]
-  "the opposite of *eq. always exactly one token is taken from the stream"
-  (let [eq (*= c)]
-    (fn [t]
-      (prof/p :**but
-        (let [to (get-token t)]
-          (when (not= c (:value to)) to)
-                                        ;(when (nil? (eq t)) (get-token t))
-          )))))
+(rule *but [c tseq]
+  ;;  "the opposite of *eq. always exactly one token is taken from the stream"
+  [eq (*eq c)]
+  (when (and (seq tseq) (not= c (first tseq))) (->Token (first tseq) (rest tseq))))
 
-(defn *any []
-  (prof/p :any
-   (fn [t] (get-token t))))
+(rule *any [_ t]
+  ;; consumes 1 token
+  (->Token (first t) (rest t)))
 
 (defn t
   ([v] (->Token v '()))
@@ -176,7 +188,8 @@
 (def *tostr (mod-t-fn (prof/fnp --tostr [v] (tostr v))))
 
 (def *toint (mod-t-fn
-              (fn [v] (when (some? v) (-> v tostr read-string num))))) ;; (num) is in in order to throw exception
+              (fn [v] (when (some? v) (-> v ^String tostr ; num;Integer.
+                                        ))))) ;; (num) is in in order to throw exception
 
 (defn nil-fn [_] (identity nil))
 
@@ -184,75 +197,136 @@
   (fn [t]
     (mod-t (fu t) nil-fn)))
 
-(defn *pack [a]
-  (fn [t]
+(defn *pack [a] 
+  (fn **pack [t]
     (mod-t (a t) vec)))
 
 (def *esc-quot (prof/fnp *esc-quot [& a] (apply (*group (ignore (*eq \\)) (*eq \")) a)))
 
+(rule *tostr [op strm]
+  (let [res (op strm)
+        chars (when res (map :value (:value res)))]
+    (when (some? chars)
+      (->T (String. (char-array (into-array chars))) (:stream res)))))
+
 (def *string (*tostr
                (*group
-                 (ignore (*eq \"))
-                 (*zero-or-more
-                   (either
-                     *esc-quot
-                     (*but \")))
+                 (ignore
+                   (*eq \"))
+                 (*splice (*zero-or-more
+                            (*splice (either
+                                       *esc-quot
+                                       (*but \")))))
                  (ignore (*eq \")))))
 
 (def *whitespace
   (ignore (*zero-or-more (either (*eq \space) (*eq \return) (*eq \newline)))))
 
+(rule *toInt [o strm]
+  (let [res (o strm)]
+    (when (some? res)
+     (->T (BigInteger.
+            ^String (:value res)) (:stream res)))))
+
+(defmacro apply-macro
+  "to be used for vararg macro like group and either to be applied on collection. vals bust be quoted. vals is collection"
+  [ma vals]
+  (println vals)
+  (println (eval vals))
+  `(~ma ~@(eval vals)))
+
+(defmacro mmap
+  "map for macros"
+  [ma values]
+  (let [res  (map (fn [v] `(~ma ~v)) (eval values))]
+    `'(~@res)))
+
 (def *number
-  (*toint (*one-or-more (apply either (map *= '(\- \1 \2 \3 \4 \5 \6 \7 \8 \9 \0))))))
+  (*toInt (*tostr (*repeat (either (*eq \-) (*eq \1) (*eq \2) (*eq \3) (*eq \4) (*eq \5) (*eq \6) (*eq \7) (*eq \8) (*eq \9) (*eq \0)))))
+)
 
 (def *true (*eq "true"))
 (def *false (*eq "false"))
-(def *null (*tostr (apply *group (map *= (seq "null")))))
-(def *true (*tostr (apply *group (map *= (seq "true")))))
-(def *false (*tostr (apply *group (map *= (seq "false")))))
+(def *null (*tostr (apply-macro *group (mmap *eq (seq "null")) ;(map (fn [%] `(*eq ~%)) (seq "null"))
+                     )))
+(def *true (*tostr (apply-macro *group (map (fn [%] `(*eq ~%)) (seq "true")))))
+(def *false (*tostr (apply-macro *group (map (fn [%] `(*eq ~%)) (seq "false")))))
 
-(def *value (*group
-              *whitespace
-              (either
-                *string
-                *number
-                #'*object
-                #'*array
-                *true
-                *false
-                *null
-                )
-              *whitespace
-              ))
+(def *value (fn [strm]
+              (some-> strm
+                ((*group
+                   *whitespace
+                   (*splice
+                     (either
+                       *string
+                       *number
+                       #'*object
+                       #'*array
+                       *true
+                       *false
+                       *null
+                       ))
+                   *whitespace))
+                ((fn [to] (let [v (some-> to :value first)
+                                s (some-> to :stream)]
+                            (some-> v (assoc :stream s))))))))
 
-(def *array (*pack (*group
-                     (ignore (*group *whitespace (*eq \[) *whitespace))
-                     (*zero-or-more
-                       (*group
-                         ;; TODO automate this!!! causes problems, as it gets resolved to (def *array (... *array )) and that's not resolvable
-                         #'*value
-                         (*zero-or-more
-                           (*group
-                             (ignore(*= \,))
-                             ;; TODO
-                             #'*value))))
-                     (ignore (*group *whitespace (*= \]) *whitespace)))))
+(def closing-bracket (ignore (*group *whitespace (*eq \]) *whitespace)))
 
-(def *pair (*pack (*group *whitespace *string *whitespace (ignore (*= \:)) *whitespace #'*value)))
 
-(def *object (*group
-               *whitespace
-               (ignore (*= \{))
-               (*zero-or-more
-                 (*group
-                   #'*pair 
-                   (*zero-or-more
-                     (*group
-                       (ignore (*= \,))
-                       #'*pair))))
-               *whitespace
-               (ignore (*= \}))
-               ))
+(def *array (fn [strm]
+              (let [res ((*group
+                           (ignore (*group *whitespace (*eq \[) *whitespace))
+                           (either
+                             (*group
+                               #'*value
+                               (either
+                                 closing-bracket
+                                 (*group
+                                   (*repeat
+                                     (*group
+                                       (ignore (*eq \,))
+                                       ;; TODO
+                                       #'*value))
+                                   closing-bracket)))
+                             closing-bracket))
+                         strm)]
+                (some->> (:value res)
+                  (map :value)
+                  vec
+                  (#(->T % (:stream res)))))))
+
+(def *pair (fn [strm]
+             (-> strm
+               ((*group *whitespace *string *whitespace (ignore (*eq \:)) *whitespace #'*value))
+               ((fn [r]
+                  (when r (->T {(:value (first (:value r))) (:value (last (:value r)))} (:stream r))))))))
+
+(def *object (fn [strm]
+               (let [res (-> strm
+                           ((*group
+                              *whitespace
+                              (ignore (*eq \{))
+                              (*zero-or-more
+                                (*group
+                                  #'*pair 
+                                  (*zero-or-more
+                                    (*group
+                                      (ignore (*eq \,))
+                                      #'*pair))))
+                              *whitespace
+                              (ignore (*eq \}))
+                              )))]
+                 (when res (->T (reduce merge  {} (map :value (:value res))) (:stream res))))))
 
 (def *json (either *array *object))
 
+(defn parse [r strm]
+  (binding [last-fail-path nil]
+    (let [res (r strm)]
+      (when (nil? res) (println "!nomatch!" last-fail-path))
+      res)))
+
+#_(*group
+  *whitespace
+  ^:splice (*zero-or-more ))
