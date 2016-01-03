@@ -11,7 +11,7 @@
 
 								 [org.clojure/core.async "0.1.346.0-17112a-alpha"]
 
-                 [mvxcvi/puget "0.8.0"]
+                                        ; [mvxcvi/puget "0.8.0"]
 
                  [midje "1.8.3"]
 
@@ -19,24 +19,38 @@
                  [com.taoensso/timbre "4.1.0"]
 
                  [criterium "0.4.3"]
+                 
+                 [org.clojure/tools.macro "0.1.2"]
+                 [org.clojure/tools.nrepl "0.2.12"]
 
-                 [org.clojure/tools.nrepl "0.2.12"]]
+                 ]
 
   ;; :global-vars {*print-length* 30}
 
   :jvm-opts ["-Dannotate.typecheck=on"]
   
-	:plugins [[mvxcvi/whidbey "0.6.0"]
-						[lein-midje "3.1.3"]]
+	:plugins [                            ;[mvxcvi/whidbey "1.1.1"]
+                                        ;	 [lein-midje "3.1.3"]
+                                        ; [venantius/ultra "0.4.0"]
+            [quickie "0.4.1"]
+            ]
 
+  :ultra {:repl         false
+          :stacktraces  false
+          :tests        true
+          :java         false}
 	;; :main ^:skip-aot jira.core
 
 	:target-path "target/%s"
 
 	:profiles {:uberjar {:aot :all}
-             :repl {:plugins [[cider/cider-nrepl "0.10.0"]
-                              [refactor-nrepl "2.0.0-SNAPSHOT"]
-                              ]}}
+             :repl {:plugins [[cider/cider-nrepl "0.11.0-SNAPSHOT"]
+                              [refactor-nrepl "2.0.0-SNAPSHOT"]]}
+             
+             :user {:dependencies [[pjstadig/humane-test-output "0.7.1"]]
+                    :injections [(require 'pjstadig.humane-test-output)
+                                 (pjstadig.humane-test-output/activate!)]}
+             }
 
 	:whidbey {:width           180
 						:map-delimiter   ""
