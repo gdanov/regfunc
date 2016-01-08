@@ -16,6 +16,16 @@
                      :expected target#, :actual val#}))
        result#)))
 
+(defmacro fm []
+  `(defmacro cfm []
+     (fn [] "hello world")))
+
+(deftest macro-lifecycle
+  (fm)
+  (let [fun (eval `(cfm))
+        fun-alt (cfm nil nil)]
+    (is (= "hello world" (fun)))))
+
 (deftest t-rule
   (rule test1 [a b] (str a " " b))
                                         ; (. #'test1 isMacro) => true

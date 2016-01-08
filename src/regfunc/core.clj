@@ -93,6 +93,15 @@
 
 ;;***********************
 
+;; name is bit misleading, as random transformation fn can be used.
+(rule *ctor [& args strm]
+  [[ctor op] args]
+  (let [r (op strm)]
+   (when (some? r) (->T (ctor (:value r)) (:stream r)))))
+
+;; TODO 
+(rule *not [op strm])
+
 (rule *but [c tseq]
   ;;  "the opposite of *eq. always exactly one token is taken from the stream"
   (when (and (seq tseq) (not= c (first tseq))) (->Token (first tseq) (rest tseq))))
@@ -131,3 +140,4 @@
 ;; work in progress
 (rule *predStream [& arg strm] [[p strArg] arg]
   (map p strArg strm ))
+

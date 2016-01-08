@@ -147,3 +147,6 @@
 
 #_(prof/profile :info :benchmarks
  (run-bench))
+
+
+(println "profile:" (dotimes [n 1000] ((fragment (*eq 1)) '(1))))

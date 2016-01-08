@@ -1,0 +1,27 @@
+{
+  "books": [
+    {
+      "name": "b1",
+      "authors": [
+        "au:123"
+      ]
+    },
+    {
+      "authors": [
+        "au:333",
+        "au:123"
+      ],
+      "name": "book 2"
+    }
+  ],
+  "authors": [
+    {
+      "name": "author one",
+      "id": "au:123"
+    },
+    {
+      "name": "author 333",
+      "id": "au:333"
+    }
+  ]
+}

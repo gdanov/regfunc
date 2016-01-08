@@ -30,7 +30,7 @@
 (deffragment *repeat-one (*repeat (*eq 1)))
 (deffragment *group-1-2 (*group (*eq 1) (*eq 2)))
 
-(deftest repeat
+(deftest t-repeat
   (equals (*repeat-one '(1 1)) (->T [(->T 1) (->T 1)]))
   (equals (*repeat-one '(1 1 2)) (->Token [(->T 1) (->T 1)] '(2)))
   (is (nil? (*repeat-one '(2 1))))
